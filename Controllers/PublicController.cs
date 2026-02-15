@@ -1,5 +1,4 @@
 using EagleFlow.Data;
-using EagleFlow.Models;
 using EagleFlow.Models.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -29,48 +28,33 @@ public class PublicController(ApplicationDbContext dbContext) : Controller
     [HttpGet]
     public async Task<IActionResult> ViewDocument(string documentNumber)
     {
-        var document = await FindActiveDocumentAsync(documentNumber);
+        var document = await dbContext.Documents
+            .FirstOrDefaultAsync(d => d.DocumentNumber == documentNumber && !d.IsDeleted);
 
-        if (document is null)
+        if (document is null || !System.IO.File.Exists(document.FilePath))
         {
             TempData["Error"] = "Document not found.";
             return RedirectToAction(nameof(Index));
         }
 
-        return PhysicalFile(document.FilePath, "application/pdf");
+        ViewBag.DocumentNumber = document.DocumentNumber;
+        ViewBag.FileName = document.OriginalFileName;
+        return File(System.IO.File.ReadAllBytes(document.FilePath), "application/pdf");
     }
 
     [HttpGet]
     public async Task<IActionResult> Download(string documentNumber)
     {
-        var document = await FindActiveDocumentAsync(documentNumber);
+        var document = await dbContext.Documents
+            .FirstOrDefaultAsync(d => d.DocumentNumber == documentNumber && !d.IsDeleted);
 
-        if (document is null)
+        if (document is null || !System.IO.File.Exists(document.FilePath))
         {
             TempData["Error"] = "Document not found.";
             return RedirectToAction(nameof(Index));
         }
 
-        return PhysicalFile(document.FilePath, "application/pdf", document.OriginalFileName);
-    }
-
-    private async Task<Document?> FindActiveDocumentAsync(string documentNumber)
-    {
-        if (string.IsNullOrWhiteSpace(documentNumber))
-        {
-            return null;
-        }
-
-        var normalizedDocumentNumber = documentNumber.Trim();
-        var document = await dbContext.Documents
-            .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.DocumentNumber == normalizedDocumentNumber && !d.IsDeleted);
-
-        if (document is null || !System.IO.File.Exists(document.FilePath))
-        {
-            return null;
-        }
-
-        return document;
+        var fileBytes = await System.IO.File.ReadAllBytesAsync(document.FilePath);
+        return File(fileBytes, "application/pdf", document.OriginalFileName);
     }
 }
